@@ -2818,11 +2818,19 @@ def main():
 
             # sources_enabled: ["hifi", "soulseek"] controls which adapter groups are active.
             # Empty or absent = all enabled (auto).
-            sources_enabled = settings.get("sources_enabled") or []
-            if sources_enabled:
-                os.environ["SOURCES_ENABLED"] = ",".join(sources_enabled)
-            else:
-                os.environ["SOURCES_ENABLED"] = ""
+            # ── FORK PATCH (michaelmenesescs) ──────────────────────────────
+            # The Go layer rewrites config.json with `omitempty`, so the source list
+            # can vanish (sources_enabled: null); this mapping then blanked
+            # SOURCES_ENABLED and silently re-enabled every source — including lossy
+            # ones that outrank FLAC for an MP3 target. If the launcher pinned
+            # SOURCES_ENABLED in the environment, that wins.
+            _env_sources = (os.getenv("SOURCES_ENABLED") or "").strip()
+            if not _env_sources:
+                sources_enabled = settings.get("sources_enabled") or []
+                if sources_enabled:
+                    os.environ["SOURCES_ENABLED"] = ",".join(sources_enabled)
+                else:
+                    os.environ["SOURCES_ENABLED"] = ""
 
             os.environ["LIBRARY_MODE"] = settings.get("library_mode") or "smart_dedup"
 
