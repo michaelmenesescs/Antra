@@ -1524,10 +1524,19 @@ func (a *App) resolveBackendCommand(playlists []string) (string, []string, strin
 	// without raising the per-account request rate that risks bans. Raised 2 -> 4.
 	// Deliberately not higher: the Tidal pool has a documented thundering-herd
 	// history (v1.1.7), and 4 stays well inside it.
+	// ── FORK PATCH (michaelmenesescs) ──────────────────────────────────────
+	// Upstream hard-caps non-supporters at ONE concurrent download, which is the
+	// visible throttle users are asked to pay Patreon to lift. That is a client
+	// policy, not a server capability: nothing about a self-hosted or P2P source
+	// requires it. ANTRA_WORKERS_OVERRIDE takes precedence (this fork ships 3);
+	// otherwise upstream behaviour is preserved exactly.
 	isSupporter, mirrorKey := a.supporterContext()
-	maxWorkers := "1"
-	if isSupporter {
-		maxWorkers = "4"
+	maxWorkers := strings.TrimSpace(os.Getenv("ANTRA_WORKERS_OVERRIDE"))
+	if maxWorkers == "" {
+		maxWorkers = "3" // fork default — upstream uses 1
+		if isSupporter {
+			maxWorkers = "4"
+		}
 	}
 	extraEnv := []string{"PYTHONUTF8=1", "ANTRA_MAX_WORKERS=" + maxWorkers}
 	if mirrorKey != "" {
@@ -1617,7 +1626,12 @@ type SourceHealthResult struct {
 	Endpoints []EndpointStatus `json:"endpoints"`
 }
 
-const defaultEndpointManifestURL = "https://gist.githubusercontent.com/anandprtp/fdc2c16b7bfdc2d337fbc86161b79371/raw"
+// ── FORK PATCH (michaelmenesescs) ──────────────────────────────────────────
+// Upstream points this at the author's public Gist (his mirror servers + a
+// shared key). Empty means "no upstream manifest": the build never fetches it,
+// and resolveEndpointManifest() returns nothing unless ANTRA_ENDPOINT_MANIFEST_URL
+// is set to a manifest you control.
+const defaultEndpointManifestURL = ""
 
 var gistIDPattern = regexp.MustCompile(`(?i)([0-9a-f]{32})`)
 
@@ -1755,6 +1769,13 @@ func resolveEndpointManifest() endpointManifest {
 	manifestURL := strings.TrimSpace(os.Getenv("ANTRA_ENDPOINT_MANIFEST_URL"))
 	if manifestURL == "" {
 		manifestURL = defaultEndpointManifestURL
+	}
+	// FORK PATCH (michaelmenesescs): no manifest URL at all means this build has
+	// no third-party endpoint source. Return an empty manifest WITHOUT reading
+	// the on-disk cache — on an existing install that cache holds upstream's
+	// mirrors and shared key, which would restore the dependency we removed.
+	if manifestURL == "" {
+		return endpointManifest{}
 	}
 
 	client := &http.Client{

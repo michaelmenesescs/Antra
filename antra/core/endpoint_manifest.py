@@ -56,9 +56,12 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# Built-in fallback manifest URL. Users can still override this via
-# ANTRA_ENDPOINT_MANIFEST_URL or explicit mirror URL env vars.
-DEFAULT_ENDPOINT_MANIFEST_URL = "https://gist.githubusercontent.com/anandprtp/fdc2c16b7bfdc2d337fbc86161b79371/raw"
+# ── FORK PATCH (michaelmenesescs) ──────────────────────────────────────────
+# Upstream ships a URL pointing at the author's public Gist, which publishes his
+# mirror servers + a shared API key. That manifest is what rate-limits free
+# users, and it is not ours. Default to no remote manifest; if you ever want one,
+# set ANTRA_ENDPOINT_MANIFEST_URL to a URL you control.
+DEFAULT_ENDPOINT_MANIFEST_URL = ""
 
 from antra.utils.runtime import get_app_data_dir
 
@@ -134,9 +137,10 @@ def load_endpoint_manifest(manifest_url: str | None = None) -> EndpointManifest:
     manifest_url = (manifest_url or os.getenv("ANTRA_ENDPOINT_MANIFEST_URL") or DEFAULT_ENDPOINT_MANIFEST_URL).strip()
 
     if not manifest_url:
-        cached = _read_cache()
-        if cached is not None:
-            return cached
+        # FORK PATCH (michaelmenesescs): do not fall back to any on-disk cache.
+        # The cache on an existing install may hold upstream's manifest (his
+        # mirror hosts + shared key), which would silently restore the very
+        # dependency this fork removes.
         logger.info("[Endpoints] No manifest URL configured; endpoint manifest loader is idle")
         return EndpointManifest(hifi=[], amazon=[], apple=[])
 

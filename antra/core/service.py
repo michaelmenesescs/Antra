@@ -1684,7 +1684,15 @@ class AntraService:
         # User's own key takes priority; shared metadata key is the universal fallback
         api_key = (getattr(cfg, "antra_api_key", "") or "").strip() or self._METADATA_PROXY_KEY
 
-        proxy_base = "https://antra.hoshi.cfd"
+        # ── FORK PATCH (michaelmenesescs) ──────────────────────────────────
+        # Upstream hardcodes the author's VPS here, so every Spotify URL fetch
+        # (and its API key) leaves the machine. This fork has no relationship
+        # with that host: the proxy is opt-in via ANTRA_METADATA_PROXY_URL and
+        # disabled when unset, which makes us fall straight through to direct
+        # Spotify/Apple fetches.
+        proxy_base = (os.getenv("ANTRA_METADATA_PROXY_URL", "") or "").strip().rstrip("/")
+        if not proxy_base:
+            return None
         try:
             # Use curl_cffi to impersonate a real browser — Cloudflare Bot Fight Mode
             # blocks plain Python requests (wrong TLS fingerprint). curl_cffi is already
