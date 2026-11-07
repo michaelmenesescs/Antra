@@ -2698,10 +2698,25 @@ def main():
                 # never flipped, leaving it at its false default).
                 sources_has_soulseek = "soulseek" in (settings.get("sources_enabled") or [])
                 soulseek_on = bool(settings["soulseek_enabled"]) or sources_has_soulseek
-                os.environ["SLSKD_AUTO_BOOTSTRAP"] = "true" if soulseek_on else "false"
-                # Desktop app uses dynamic auto-bootstrap. Force clear static env keys to trigger it always.
-                os.environ["SLSKD_BASE_URL"] = ""
-                os.environ["SLSKD_API_KEY"] = ""
+                # ── FORK PATCH (michaelmenesescs) ──────────────────────────
+                # Upstream unconditionally blanks SLSKD_BASE_URL/API_KEY here so
+                # that the "managed bootstrap" always spawns (and owns) an slskd.
+                # That makes it impossible to use an slskd you run yourself — e.g.
+                # a Docker container — and it will fight one over the same port.
+                # If SLSKD_EXTERNAL_URL is set we are meant to talk to that
+                # instance: keep the URL, never bootstrap, no spawn.
+                external_slskd = (os.getenv("SLSKD_EXTERNAL_URL") or "").strip()
+                if external_slskd:
+                    os.environ["SLSKD_BASE_URL"] = external_slskd
+                    os.environ["SLSKD_AUTO_BOOTSTRAP"] = "false"
+                    _ext_key = (os.getenv("SLSKD_EXTERNAL_API_KEY") or "").strip()
+                    if _ext_key:
+                        os.environ["SLSKD_API_KEY"] = _ext_key
+                else:
+                    os.environ["SLSKD_AUTO_BOOTSTRAP"] = "true" if soulseek_on else "false"
+                    # Desktop app uses dynamic auto-bootstrap. Force clear static env keys to trigger it always.
+                    os.environ["SLSKD_BASE_URL"] = ""
+                    os.environ["SLSKD_API_KEY"] = ""
 
             if settings.get("soulseek_username"):
                 os.environ["SOULSEEK_USERNAME"] = settings["soulseek_username"]
