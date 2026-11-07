@@ -616,9 +616,11 @@ class SoulseekAdapter(BaseSourceAdapter):
         cache cannot turn this into a full-tree scan of old downloads.
         """
         downloads_dir = self._get_downloads_dir()
-        basename = os.path.basename(
-            str(dl.get("filename") or dl.get("file") or fallback_filename or "")
-        )
+        # slskd reports remote paths with Windows separators ("Share\Artist\06 Track.flac").
+        # On POSIX, os.path.basename() only splits on "/", so an un-normalised name
+        # comes back whole and matches nothing on disk.
+        raw_name = str(dl.get("filename") or dl.get("file") or fallback_filename or "")
+        basename = os.path.basename(raw_name.replace("\\", "/"))
         if not downloads_dir or not basename or not os.path.isdir(downloads_dir):
             return None
         try:
