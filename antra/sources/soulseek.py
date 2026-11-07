@@ -591,6 +591,58 @@ class SoulseekAdapter(BaseSourceAdapter):
         files_api_match = self._resolve_download_path_via_files_api(dl, username=username)
         if files_api_match:
             return files_api_match
+        # ── FORK PATCH (michaelmenesescs) ──────────────────────────────────
+        # slskd does NOT have to store the file at the remote path it reports:
+        # 0.26 flattens a UNC/remote path to something like
+        #   <downloads>/1998 <Album> (CD, Label)/10 - Track.flac
+        # while the API still says
+        #   <downloads>/<peer>/@@share/Music/Artist/1998 <Album>/10 - Track.flac
+        # Every reconstructed candidate therefore misses, the transfer is marked
+        # failed even though the bytes are on disk, and the app retries peer after
+        # peer until it gives up. Find the file the only reliable way: on disk.
+        disk_match = self._find_downloaded_file_on_disk(dl, fallback_filename)
+        if disk_match:
+            return disk_match
+        return None
+
+    def _find_downloaded_file_on_disk(
+        self,
+        dl: dict[str, Any],
+        fallback_filename: str,
+    ) -> Optional[str]:
+        """Locate a completed transfer on disk by name (and size when known).
+
+        Bounded to files modified in the last hour so an ever-growing library
+        cache cannot turn this into a full-tree scan of old downloads.
+        """
+        downloads_dir = self._get_downloads_dir()
+        basename = os.path.basename(
+            str(dl.get("filename") or dl.get("file") or fallback_filename or "")
+        )
+        if not downloads_dir or not basename or not os.path.isdir(downloads_dir):
+            return None
+        try:
+            expected_size = int(dl.get("size") or 0)
+        except (TypeError, ValueError):
+            expected_size = 0
+        stem = os.path.splitext(basename)[0]
+        cutoff = time.time() - 3600
+        for root, _dirs, files in os.walk(downloads_dir):
+            for name in files:
+                if name != basename and os.path.splitext(name)[0] != stem:
+                    continue
+                full = os.path.join(root, name)
+                try:
+                    if os.path.getmtime(full) < cutoff:
+                        continue
+                    size = os.path.getsize(full)
+                except OSError:
+                    continue
+                if size <= 0:
+                    continue
+                if expected_size and size != expected_size:
+                    continue
+                return full
         return None
 
     def _candidate_download_path(self, dl: dict[str, Any], fallback_filename: str, username: str = "") -> Optional[str]:
