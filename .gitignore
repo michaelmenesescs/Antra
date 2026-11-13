@@ -163,3 +163,6 @@ OPERATIONS.md
 CHANGELOG_v1.1.8.md
 CHANGELOG_v1.1.*.md
 ANNOUNCEMENT_*.md
+
+# our HTTP front-end lives here (upstream ignores Antra-Web/ case-insensitively)
+!tools/antra-web/
